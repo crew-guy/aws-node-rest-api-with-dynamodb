@@ -1,0 +1,92 @@
+service: serverless-rest-api-with-dynamodb
+
+frameworkVersion: '>=1.1.0 <2.0.0'
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+
+  # Since dynamo db table will
+  environment:
+    # To name our dynamo db table and then specify stage of table
+    # If no opt is provided, then value will default to stage of "provider" here which also, if not specified, defaults to "dev"
+    DYNAMODB_TABLE: ${self:service}-${opt:stage, self:provider.stage}
+
+  # Only allow access to the necessary policies to our lambda function
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: 'arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}'
+
+# All our handler functions as routes with configuration details about each http event call
+functions:
+  create:
+    handler: todos/create.create
+    events:
+      - http:
+          path: todos
+          method: post
+          # Can hit API from any endpoint. Works for dev environment. Make it more secure for prod environment
+          cors: true
+
+  list:
+    handler: todos/list.list
+    events:
+      - http:
+          path: todos
+          method: get
+          cors: true
+
+  get:
+    handler: todos/get.get
+    events:
+      - http:
+          # dynamic routes
+          path: todos/{id}
+          method: get
+          cors: true
+
+  update:
+    handler: todos/update.update
+    events:
+      - http:
+          path: todos/{id}
+          method: put
+          cors: true
+
+  delete:
+    handler: todos/delete.delete
+    events:
+      - http:
+          path: todos/{id}
+          method: delete
+          cors: true
+
+resources:
+  Resources:
+    # Resource name given by us
+    TodosDynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        # Column names in table
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+
+        # Config read and write per sec
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+
+        # Table name as defined in our "provider" obj in this serverless.yml file
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
